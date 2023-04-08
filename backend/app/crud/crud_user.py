@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Union
 from app.core.security import get_password_hash, verify_password
 from app.crud.base import CRUDBase
 from app.models.user import User
+from app.models.account import Account
 from app.models.role import Role
 from app.schemas.user import UserCreate, UserUpdate
 from pydantic.types import UUID4
@@ -21,7 +22,6 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
             email=obj_in.email,
             hashed_password=get_password_hash(obj_in.password),
             full_name=obj_in.full_name,
-            account_id=obj_in.account_id,
             role_id=obj_in.role_id
         )
         db.add(db_obj)
@@ -75,7 +75,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
     ) -> List[User]:
         return (
             db.query(self.model)
-            .filter(User.account_id == account_id)
+            .filter(User.accounts.any(Account.id.in_([account_id])))
             .offset(skip)
             .limit(limit)
             .all()

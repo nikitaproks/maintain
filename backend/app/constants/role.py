@@ -7,14 +7,17 @@ class Role:
         "name": "GUEST",
         "description": "A Guest Account",
     }
+    ACCOUNT_MEMEBER = {
+        "name": "ACCOUNT_MEMEBER",
+        "description": "Member of a maintenance team",
+    }
     ACCOUNT_ADMIN = {
         "name": "ACCOUNT_ADMIN",
-        "description": "Primary Administrator/Superuser For an Account",
+        "description": "Manager of a local entity",
     }
-
-    ACCOUNT_MANAGER = {
-        "name": "ACCOUNT_MANAGER",
-        "description": "Day to Day Administrator of Events For an Account",
+    FLEET_MANAGER = {
+        "name": "FLEET_MANAGER",
+        "description": "Manager of the fleet",
     }
     ADMIN = {
         "name": "ADMIN",

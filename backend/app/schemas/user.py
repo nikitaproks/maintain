@@ -1,17 +1,14 @@
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, List
 from app.schemas.role import Role
 from pydantic import UUID4, BaseModel, EmailStr
 
 
-# Shared properties
 class UserBase(BaseModel):
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = True
     full_name: Optional[str] = None
     phone_number: Optional[str] = None
-    account_id: Optional[UUID4] = None
 
 
 # Properties to receive via API on creation
@@ -22,24 +19,27 @@ class UserCreate(UserBase):
 
 # Properties to receive via API on update
 class UserUpdate(UserBase):
-    pass
+    role_id: Optional[UUID4]
 
 
-class UserInDBBase(UserBase):
+class User(UserBase):
     id: UUID4
     role: Role
-    created_at: datetime
-    updated_at: datetime
+    # tickets_reported: List[Ticket]
 
     class Config:
         orm_mode = True
 
 
-# Additional properties to return via API
-class User(UserInDBBase):
-    pass
+class UserFull(User):
+    accounts: "List[Account]"
+    created_at: datetime
+    updated_at: datetime
 
 
-# Additional properties stored in DB
-class UserInDB(UserInDBBase):
+class UserInDB(UserFull):
     hashed_password: str
+
+
+from app.schemas.account import Account  # noqa
+UserFull.update_forward_refs()

@@ -10,59 +10,77 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
-@router.get("", response_model=List[schemas.Account])
-def get_accounts(
+@router.get("/{account_id}/",
+            response_model=schemas.AccountFull,
+            status_code=201,
+            dependencies=[Depends(deps.RoleChecker([
+                Role.ADMIN["name"],
+                Role.SUPER_ADMIN["name"],
+                Role.ACCOUNT_ADMIN["name"],
+            ]))],
+            )
+def get_account(
     *,
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    account_id: UUID4,
     current_user: models.User = Security(
-        deps.get_current_active_user,
-        scopes=[Role.ADMIN["name"], Role.SUPER_ADMIN["name"]],
+        deps.get_current_active_user
     ),
 ) -> Any:
     """
-    Retrieve all accounts.
+    Get account.
     """
-    accounts = crud.account.get_multi(db, skip=skip, limit=limit)
-    return accounts
+    account = crud.account.get(db, id=account_id)
+    if not account:
+        raise HTTPException(
+            status_code=404, detail="account does not exist",
+        )
 
-
-@router.get("/me", response_model=schemas.Account)
-def get_account_for_user(
-    *,
-    db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
-    current_user: models.User = Depends(deps.get_current_active_user),
-) -> Any:
-    """
-    Retrieve account for a logged in user.
-    """
-    account = crud.account.get(db, id=current_user.account_id)
+    deps.check_account_ownership(current_user, account.owner_id)
     return account
 
 
-@router.post("", response_model=schemas.Account)
+@router.post("",
+             response_model=schemas.Account,
+             status_code=201,
+             dependencies=[Depends(deps.RoleChecker([
+                 Role.ADMIN["name"],
+                 Role.SUPER_ADMIN["name"],
+                 Role.ACCOUNT_ADMIN["name"],
+             ]))],
+             )
 def create_account(
     *,
     db: Session = Depends(deps.get_db),
     account_in: schemas.AccountCreate,
-    current_user: models.User = Depends(deps.get_current_active_user),
+    current_user: models.User = Security(
+        deps.get_current_active_user,
+    ),
 ) -> Any:
     """
-    Create an user account
+    Create an account
     """
     account = crud.account.get_by_name(db, name=account_in.name)
     if account:
         raise HTTPException(
             status_code=409,
             detail="An account with this name already exists",)
+    account_in.owner_id = current_user.id
     account = crud.account.create(db, obj_in=account_in)
+    account.users.append(current_user)
+    account = crud.account.change(db, db_obj=account)
     return account
 
 
-@router.put("/{account_id}", response_model=schemas.Account)
+@router.put("/{account_id}",
+            response_model=schemas.Account,
+            status_code=201,
+            dependencies=[Depends(deps.RoleChecker([
+                Role.ADMIN["name"],
+                Role.SUPER_ADMIN["name"],
+                Role.ACCOUNT_ADMIN["name"],
+            ]))],
+            )
 def update_account(
     *,
     db: Session = Depends(deps.get_db),
@@ -70,38 +88,69 @@ def update_account(
     account_in: schemas.AccountUpdate,
     current_user: models.User = Security(
         deps.get_current_active_user,
-        scopes=[
-            Role.ADMIN["name"],
-            Role.SUPER_ADMIN["name"],
-            Role.ACCOUNT_ADMIN["name"],
-        ],
     ),
 ) -> Any:
     """
     Update an account.
     """
-
-    # If user is an account admin, check ensure they update their own account.
-    if current_user.role.name == Role.ACCOUNT_ADMIN["name"]:
-        if current_user.account_id != account_id:
-            raise HTTPException(
-                status_code=401,
-                detail=(
-                    "This user does not have the permissions to "
-                    "update this account"
-                ),
-            )
     account = crud.account.get(db, id=account_id)
     if not account:
         raise HTTPException(
             status_code=404, detail="account does not exist",
         )
+
+    deps.check_account_ownership(current_user, account.owner_id)
+
     account = crud.account.update(
         db, db_obj=account, obj_in=account_in)
+
     return account
 
 
-@router.post("/{account_id}/users", response_model=schemas.User)
+@router.delete("/{account_id}",
+               status_code=201,
+               dependencies=[Depends(deps.RoleChecker([
+                   Role.ADMIN["name"],
+                   Role.SUPER_ADMIN["name"],
+                   Role.ACCOUNT_ADMIN["name"],
+               ]))],
+               )
+def delete_account(
+    *,
+    db: Session = Depends(deps.get_db),
+    account_id: UUID4,
+    current_user: models.User = Security(
+        deps.get_current_active_user,
+    ),
+) -> Any:
+    """
+    Update an account.
+    """
+    account = crud.account.get(db, id=account_id)
+    if not account:
+        raise HTTPException(
+            status_code=404, detail="account does not exist",
+        )
+
+    deps.check_account_ownership(current_user, account.owner_id)
+
+    crud.account.delete(
+        db, id=account.id)
+
+    return "Account was successfully deleted"
+
+# Account user management
+
+
+@router.post("/{account_id}/users",
+             response_model=schemas.AccountFull,
+             status_code=201,
+             dependencies=[Depends(deps.RoleChecker([
+                 Role.ADMIN["name"],
+                 Role.SUPER_ADMIN["name"],
+                 Role.ACCOUNT_ADMIN["name"],
+             ]))],
+             )
 def add_user_to_account(
     *,
     db: Session = Depends(deps.get_db),
@@ -122,61 +171,153 @@ def add_user_to_account(
         raise HTTPException(
             status_code=404, detail="User does not exist",
         )
-    user_in = schemas.UserUpdate(account_id=account_id)
-    updated_user = crud.user.update(db, db_obj=user, obj_in=user_in)
-    return updated_user
+
+    deps.check_account_ownership(current_user, account.owner_id)
+
+    account.users.append(user)
+    account = crud.account.change(db, db_obj=account)
+    return account
 
 
-@router.get("/{account_id}/users", response_model=List[schemas.User])
-def retrieve_users_for_account(
+@router.post("/{account_id}/users/delete",
+             response_model=schemas.AccountFull,
+             status_code=201,
+             dependencies=[Depends(deps.RoleChecker([
+                 Role.ADMIN["name"],
+                 Role.SUPER_ADMIN["name"],
+                 Role.ACCOUNT_ADMIN["name"],
+             ]))],
+             )
+def delete_user_from_account(
     *,
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
     account_id: UUID4,
-    current_user: models.User = Security(
-        deps.get_current_active_user,
-        scopes=[Role.ADMIN["name"], Role.SUPER_ADMIN["name"]],
-    ),
+    user_id: str = Body(..., embed=True),
+    current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
-    Retrieve users for an account.
+    Add a user to an account.
     """
     account = crud.account.get(db, id=account_id)
     if not account:
         raise HTTPException(
             status_code=404, detail="account does not exist",
         )
-    account_users = crud.user.get_by_account_id(
-        db, account_id=account_id, skip=skip, limit=limit
-    )
-    return account_users
+    user = crud.user.get(db, id=user_id)
+    if not user:
+        raise HTTPException(
+            status_code=404, detail="User does not exist",
+        )
+
+    if user not in account.users:
+        raise HTTPException(
+            status_code=404,
+            detail=("User is not assigned to this account"),
+        )
+
+    deps.check_account_ownership(current_user, account.owner_id)
+
+    account.users.remove(user)
+    account = crud.account.change(db, db_obj=account)
+    return account
 
 
-@router.get("/users/me", response_model=List[schemas.Account])
-def retrieve_users_for_own_account(
+# Account city management
+@router.post("/{account_id}/cities",
+             response_model=schemas.AccountFull,
+             status_code=201,
+             dependencies=[Depends(deps.RoleChecker([
+                 Role.ADMIN["name"],
+                 Role.SUPER_ADMIN["name"],
+                 Role.ACCOUNT_ADMIN["name"],
+             ]))],
+             )
+def add_city_to_account(
+    *,
+    db: Session = Depends(deps.get_db),
+    account_id: UUID4,
+    city_name: str = Body(..., embed=True),
+    current_user: models.User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Add a city to an account.
+    """
+    account = crud.account.get(db, id=account_id)
+    if not account:
+        raise HTTPException(
+            status_code=404, detail="account does not exist",
+        )
+    city = crud.city.get_by_name(db, name=city_name)
+    if not city:
+        raise HTTPException(
+            status_code=404, detail="city does not exist",
+        )
+
+    deps.check_account_ownership(current_user, account.owner_id)
+
+    account.cities.append(city)
+    account = crud.account.change(db, db_obj=account)
+    return account
+
+
+@router.post("/{account_id}/cities/delete",
+             response_model=schemas.AccountFull,
+             status_code=201,
+             dependencies=[Depends(deps.RoleChecker([
+                 Role.ADMIN["name"],
+                 Role.SUPER_ADMIN["name"],
+                 Role.ACCOUNT_ADMIN["name"],
+             ]))],
+             )
+def delete_user_from_account(
+    *,
+    db: Session = Depends(deps.get_db),
+    account_id: UUID4,
+    city_name: str = Body(..., embed=True),
+    current_user: models.User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Add a city to an account.
+    """
+    account = crud.account.get(db, id=account_id)
+    if not account:
+        raise HTTPException(
+            status_code=404, detail="account does not exist",
+        )
+    city = crud.city.get_by_name(db, name=city_name)
+    if not city:
+        raise HTTPException(
+            status_code=404, detail="city does not exist",
+        )
+
+    if city not in account.cities:
+        raise HTTPException(
+            status_code=404,
+            detail=("City is not assigned to this account"),
+        )
+
+    deps.check_account_ownership(current_user, account.owner_id)
+
+    account.cities.remove(city)
+    account = crud.account.change(db, db_obj=account)
+    return account
+
+# Admin account section
+
+
+@router.get("", response_model=List[schemas.AccountFull])
+def get_accounts(
     *,
     db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
     current_user: models.User = Security(
         deps.get_current_active_user,
-        scopes=[
-            Role.ADMIN["name"],
-            Role.SUPER_ADMIN["name"],
-            Role.ACCOUNT_ADMIN["name"],
-        ],
+        scopes=[Role.ADMIN["name"], Role.SUPER_ADMIN["name"]],
     ),
 ) -> Any:
     """
-    Retrieve users for own account.
+    Retrieve all accounts.
     """
-    account = crud.account.get(db, id=current_user.account_id)
-    if not account:
-        raise HTTPException(
-            status_code=404, detail="account does not exist",
-        )
-    account_users = crud.user.get_by_account_id(
-        db, account_id=account.id, skip=skip, limit=limit
-    )
-    return account_users
+    accounts = crud.account.get_multi(db, skip=skip, limit=limit)
+    return accounts

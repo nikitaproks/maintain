@@ -19,10 +19,11 @@ class Settings(BaseSettings):
     FIRST_SUPER_ADMIN_PASSWORD: str
     FIRST_SUPER_ADMIN_ACCOUNT_NAME: str
 
-    DB_HOST: str
-    DB_USER: str
-    DB_PASSWORD: str
-    DB_NAME: str
+    POSTGRES_HOST: str
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    POSTGRES_PORT: int
 
     SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
 
@@ -34,10 +35,10 @@ class Settings(BaseSettings):
             return v
         return PostgresDsn.build(
             scheme="postgresql",
-            user=values.get("DB_USER"),
-            password=values.get("DB_PASSWORD"),
-            host=values.get("DB_HOST"),
-            path=f"/{values.get('DB_NAME') or  ''}",
+            user=values.get("POSTGRES_USER"),
+            password=values.get("POSTGRES_PASSWORD"),
+            host=values.get("POSTGRES_HOST"),
+            path=f"/{values.get('POSTGRES_DB') or  ''}",
         )
 
     class Config:

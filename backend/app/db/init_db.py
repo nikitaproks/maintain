@@ -31,6 +31,14 @@ def init_db(db: Session) -> None:
             description=Role.GUEST["description"])
         crud.role.create(db, obj_in=guest_role_in)
 
+    account_member_role = crud.role.get_by_name(
+        db, name=Role.ACCOUNT_MEMEBER["name"])
+    if not account_member_role:
+        account_member_role_in = schemas.RoleCreate(
+            name=Role.ACCOUNT_MEMEBER["name"],
+            description=Role.ACCOUNT_MEMEBER["description"])
+        crud.role.create(db, obj_in=account_member_role_in)
+
     account_admin_role = crud.role.get_by_name(
         db, name=Role.ACCOUNT_ADMIN["name"]
     )
@@ -41,13 +49,23 @@ def init_db(db: Session) -> None:
         )
         crud.role.create(db, obj_in=account_admin_role_in)
 
+    fleet_manager_role = crud.role.get_by_name(
+        db, name=Role.FLEET_MANAGER["name"]
+    )
+    if not fleet_manager_role:
+        fleet_manager_role_in = schemas.RoleCreate(
+            name=Role.FLEET_MANAGER["name"],
+            description=Role.FLEET_MANAGER["description"],
+        )
+        crud.role.create(db, obj_in=fleet_manager_role_in)
+
     account_manager_role = crud.role.get_by_name(
-        db, name=Role.ACCOUNT_MANAGER["name"]
+        db, name=Role.ACCOUNT_ADMIN["name"]
     )
     if not account_manager_role:
         account_manager_role_in = schemas.RoleCreate(
-            name=Role.ACCOUNT_MANAGER["name"],
-            description=Role.ACCOUNT_MANAGER["description"],
+            name=Role.ACCOUNT_ADMIN["name"],
+            description=Role.ACCOUNT_ADMIN["description"],
         )
         crud.role.create(db, obj_in=account_manager_role_in)
 
@@ -81,8 +99,6 @@ def init_db(db: Session) -> None:
             email=settings.FIRST_SUPER_ADMIN_EMAIL,
             password=settings.FIRST_SUPER_ADMIN_PASSWORD,
             full_name=settings.FIRST_SUPER_ADMIN_EMAIL,
-            account_id=account.id,
             role_id=super_admin_role.id
         )
-        print(user_in.role_id)
         user = crud.user.create(db, obj_in=user_in)

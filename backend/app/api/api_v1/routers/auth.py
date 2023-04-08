@@ -41,11 +41,13 @@ def login_access_token(
         "role": role,
         "email": str(user.email),
     }
+    token, expire_date = security.create_token(
+        token_payload, expires_delta=access_token_expires
+    )
     return {
-        "access_token": security.create_token(
-            token_payload, expires_delta=access_token_expires
-        ),
+        "access_token": token,
         "token_type": "bearer",
+        "exp": expire_date
     }
 
 

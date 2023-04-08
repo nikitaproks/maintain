@@ -34,4 +34,4 @@ def create_token(
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=ALGORITHM
     )
-    return encoded_jwt
+    return encoded_jwt, expire

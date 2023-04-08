@@ -2,7 +2,24 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings  # noqa
 
-DATABASE_URL = "postgresql://myuser:password@localhost/fastapi_database"
+
+def get_url():
+    from app.core.config import settings
+
+    user = settings.POSTGRES_USER
+    password = settings.POSTGRES_PASSWORD
+    host = settings.POSTGRES_HOST
+    port = settings.POSTGRES_PORT
+    db = (
+        settings.POSTGRES_DB
+        if settings.ENVIRONMENT in ["prod", "dev"]
+        else f"{settings.POSTGRES_DB}_test"
+    )
+
+    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
+
+
+DATABASE_URL = get_url()
 
 engine = create_engine(DATABASE_URL)
 
